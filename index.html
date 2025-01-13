@@ -1,150 +1,92 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>بث مباشر مع التعليق</title>
+  <title>البث المباشر للمباريات</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      background-color: #f4f4f9;
-      margin: 0;
-      padding: 0;
-      text-align: center;
     }
+    
     #video-container {
-      position: relative;
-      width: 80%;
-      margin: 20px auto;
-      max-width: 800px;
+      width: 640px;
+      height: 480px;
+      border: 1px solid #ccc;
     }
-    video {
-      width: 100%;
-      border-radius: 10px;
-    }
-    #controls {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      right: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: rgba(0, 0, 0, 0.6);
+    
+    #commentary-box {
+      width: 640px;
+      height: 100px;
+      border: 1px solid #ccc;
       padding: 10px;
-      border-radius: 5px;
-    }
-    #controls button, #controls input {
-      background: #fff;
-      border: none;
-      padding: 10px;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-    #controls button:hover {
-      background: #ddd;
-    }
-    #admin-panel {
-      display: none;
-      margin: 20px auto;
-      text-align: center;
+      overflow-y: auto;
     }
   </style>
 </head>
 <body>
-  <h1>مشغل بث مباشر مع التعليق</h1>
-
+  <h1>البث المباشر للمباريات</h1>
   <div id="video-container">
-    <video id="video" controls autoplay>
-      <source src="https://www.learningcontainer.com/wp-content/uploads/2020/05/sample-mp4-file.mp4" type="video/mp4">
-      الفيديو غير مدعوم.
-    </video>
-    <div id="controls">
-      <input type="text" id="video-url" placeholder="أدخل رابط البث المباشر">
-      <button onclick="loadStream()">تحميل البث</button>
-      <button id="start-commentary" onclick="startCommentary()">ابدأ التعليق</button>
-      <button id="stop-commentary" onclick="stopCommentary()" disabled>إيقاف التعليق</button>
-    </div>
+    <video id="video" width="640" height="480" controls></video>
   </div>
-
-  <div id="admin-panel">
-    <h2>لوحة التحكم الخاصة بالمعلق</h2>
-    <p id="status">الحالة: غير نشط</p>
-  </div>
+  <button id="start-commentary">بدء التعليق</button>
+  <button id="stop-commentary" disabled>إيقاف التعليق</button>
+  <div id="commentary-box"></div>
 
   <script>
-    const video = document.getElementById('video');
-    const startBtn = document.getElementById('start-commentary');
-    const stopBtn = document.getElementById('stop-commentary');
-    const status = document.getElementById('status');
+    let video = document.getElementById('video');
+    let startCommentary = document.getElementById('start-commentary');
+    let stopCommentary = document.getElementById('stop-commentary');
+    let commentaryBox = document.getElementById('commentary-box');
+    let commentaryStarted = false;
+    let mediaStream = null;
+    let mediaRecorder = null;
+    let recordedBlobs = [];
 
-    // تحميل رابط بث مباشر
-    function loadStream() {
-      const url = document.getElementById('video-url').value;
-      if (url) {
-        video.src = url;
-        video.load();
-        video.play();
-      } else {
-        alert('يرجى إدخال رابط البث المباشر.');
-      }
-    }
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    .then(stream => {
+      mediaStream = stream;
+      video.srcObject = stream;
+    })
+    .catch(error => {
+      console.error('خطأ في البث المباشر:', error);
+    });
 
-    // إعداد WebRTC للتعليق المباشر
-    let audioStream;
-    let mixedStream;
-    let mediaRecorder;
-    let audioContext;
+    startCommentary.addEventListener('click', () => {
+      commentaryStarted = true;
+      stopCommentary.disabled = false;
+      startCommentary.disabled = true;
+      mediaRecorder = new MediaRecorder(mediaStream);
+      mediaRecorder.ondataavailable = event => {
+        recordedBlobs.push(event.data);
+      };
+      mediaRecorder.start();
+    });
 
-    function startCommentary() {
-      navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(audio => {
-          audioStream = audio;
-
-          // إنشاء AudioContext لدمج الصوت والفيديو
-          audioContext = new AudioContext();
-          const audioSource = audioContext.createMediaStreamSource(audio);
-          const videoSource = audioContext.createMediaElementSource(video);
-
-          // إنشاء عقدة دمج الصوت والفيديو
-          const destination = audioContext.createMediaStreamDestination();
-          audioSource.connect(destination);
-          videoSource.connect(destination);
-
-          // بث الفيديو مع الصوت
-          mixedStream = destination.stream;
-          video.srcObject = mixedStream;
-
-          // تسجيل التعليق المباشر
-          mediaRecorder = new MediaRecorder(mixedStream);
-          mediaRecorder.start();
-
-          status.textContent = 'الحالة: جاري التعليق المباشر';
-          startBtn.disabled = true;
-          stopBtn.disabled = false;
-
-          mediaRecorder.ondataavailable = event => {
-            // تخزين التسجيل (إذا احتجت لاحقًا)
-          };
-        })
-        .catch(err => {
-          console.error('فشل الوصول إلى الميكروفون:', err);
-        });
-    }
-
-    function stopCommentary() {
+    stopCommentary.addEventListener('click', () => {
+      commentaryStarted = false;
+      stopCommentary.disabled = true;
+      startCommentary.disabled = false;
       mediaRecorder.stop();
-      audioStream.getTracks().forEach(track => track.stop());
-      status.textContent = 'الحالة: التعليق متوقف';
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-    }
+    });
 
-    // عرض أدوات التعليق فقط إذا كنت مسؤولًا
-    const isAdmin = true; // عدل هذا حسب الحالة
-    if (isAdmin) {
-      document.getElementById('admin-panel').style.display = 'block';
-    }
+    // إضافة التعليق الصوتي
+    let audioContext = new AudioContext();
+    let audioSource = audioContext.createMediaStreamSource(mediaStream);
+    let audioGain = audioContext.createGain();
+    audioSource.connect(audioGain);
+    audioGain.connect(audioContext.destination);
+
+    // بث الصوت
+    let socket = new WebSocket('ws://localhost:8080');
+    socket.onmessage = event => {
+      let audioData = event.data;
+      let audioBuffer = audioContext.createBuffer(1, audioData.length, 44100);
+      audioBuffer.copyToChannel(audioData, 0);
+      let audioBufferSource = audioContext.createBufferSource();
+      audioBufferSource.buffer = audioBuffer;
+      audioBufferSource.connect(audioContext.destination);
+      audioBufferSource.start();
+    };
   </script>
 </body>
 </html>
