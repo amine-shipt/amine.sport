@@ -1,4 +1,5 @@
 
+```
 <!DOCTYPE html>
 <html>
 <head>
@@ -6,59 +7,44 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-    } 
+    }
     
     #video-container {
       width: 640px;
       height: 480px;
       border: 1px solid #ccc;
     }
-    
-    #commentary-box {
-      width: 640px;
-      height: 100px;
-      border: 1px solid #ccc;
-      padding: 10px;
-      overflow-y: auto;
-    }
   </style>
 </head>
 <body>
   <h1>البث المباشر للمباريات</h1>
   <div id="video-container">
-    <video id="video" width="640" height="480" controls></video>
+    <video id="video" width="640" height="480" controls>
+      <source src="رابط_البث_المباشر" type="video/mp4">
+    </video>
   </div>
   <button id="start-commentary">بدء التعليق</button>
   <button id="stop-commentary" disabled>إيقاف التعليق</button>
-  <div id="commentary-box"></div>
 
   <script>
     let video = document.getElementById('video');
     let startCommentary = document.getElementById('start-commentary');
     let stopCommentary = document.getElementById('stop-commentary');
-    let commentaryBox = document.getElementById('commentary-box');
     let commentaryStarted = false;
+    let audioContext = new AudioContext();
+    let audioGain = audioContext.createGain();
     let mediaStream = null;
     let mediaRecorder = null;
-    let recordedBlobs = [];
 
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-    .then(stream => {
-      mediaStream = stream;
-      video.srcObject = stream;
-    })
-    .catch(error => {
-      console.error('خطأ في البث المباشر:', error);
-    });
-
-    startCommentary.addEventListener('click', () => {
+    startCommentary.addEventListener('click', async () => {
       commentaryStarted = true;
       stopCommentary.disabled = false;
       startCommentary.disabled = true;
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      let audioSource = audioContext.createMediaStreamSource(mediaStream);
+      audioSource.connect(audioGain);
+      audioGain.connect(audioContext.destination);
       mediaRecorder = new MediaRecorder(mediaStream);
-      mediaRecorder.ondataavailable = event => {
-        recordedBlobs.push(event.data);
-      };
       mediaRecorder.start();
     });
 
@@ -67,26 +53,8 @@
       stopCommentary.disabled = true;
       startCommentary.disabled = false;
       mediaRecorder.stop();
+      mediaStream.getTracks().forEach(track => track.stop());
     });
-
-    // إضافة التعليق الصوتي
-    let audioContext = new AudioContext();
-    let audioSource = audioContext.createMediaStreamSource(mediaStream);
-    let audioGain = audioContext.createGain();
-    audioSource.connect(audioGain);
-    audioGain.connect(audioContext.destination);
-
-    // بث الصوت
-    let socket = new WebSocket('ws://localhost:8080');
-    socket.onmessage = event => {
-      let audioData = event.data;
-      let audioBuffer = audioContext.createBuffer(1, audioData.length, 44100);
-      audioBuffer.copyToChannel(audioData, 0);
-      let audioBufferSource = audioContext.createBufferSource();
-      audioBufferSource.buffer = audioBuffer;
-      audioBufferSource.connect(audioContext.destination);
-      audioBufferSource.start();
-    };
   </script>
 </body>
 </html>
